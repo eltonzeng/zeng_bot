@@ -33,3 +33,15 @@ Follow clean architecture principles using Go idiomatic pseudo-OOP (Structs and 
 - **Error Handling:** Explicit error checking (`if err != nil`). Wrap errors with context (`fmt.Errorf("failed to add to cart: %w", err)`). NEVER use `panic` outside of initialization.
 - **Interfaces:** Define behavior via interfaces (e.g., `type CheckoutClient interface { AddToCart(...) error }`) to allow for easy mock testing.
 - **Documentation:** Provide high-level comments for all exported structs and methods.
+
+## 6. Reference: Target API & Anti-Bot
+- **Main Domain:** `https://www.target.com`
+- **Inventory API (RedSky):** `https://redsky.target.com/redsky_aggregations/v1/web/pdp_fulfillment_v1`
+  - *Purpose:* Check stock for a DPCI across specific store locations.
+- **Cart API:** `https://api.target.com/v2/cart_items`
+  - *Purpose:* Add-to-cart (ATC) operations. Requires `visitorId` and `cartId`.
+- **Checkout API:** `https://api.target.com/v4/orders`
+  - *Purpose:* Final submission of payment and order confirmation.
+- **Security Provider:** PerimeterX (HUMAN Security).
+  - *Cookie Requirements:* Must maintain `_px3`, `_pxvid`, and `_pxhd`.
+  - *Headers:* Must mirror a browser’s `User-Agent`, `sec-ch-ua`, and `Accept-Encoding` exactly.
