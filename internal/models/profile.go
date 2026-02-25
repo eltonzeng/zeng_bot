@@ -1,10 +1,13 @@
 // Package models defines the core data structures used throughout the bot.
 package models
 
-// Profile represents a user's billing and shipping information for checkout.
+// Profile represents a user's account credentials, billing and shipping
+// information for checkout. Password is required — Target does not allow
+// guest checkout.
 type Profile struct {
 	Name     string  `json:"name"`
 	Email    string  `json:"email"`
+	Password string  `json:"password"`
 	Phone    string  `json:"phone"`
 	Billing  Address `json:"billing"`
 	Shipping Address `json:"shipping"`

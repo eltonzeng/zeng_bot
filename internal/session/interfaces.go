@@ -15,4 +15,13 @@ type Session interface {
 	// Do executes an HTTP request and returns the raw response body.
 	// The underlying client handles TLS fingerprint spoofing.
 	Do(method, url string, headers map[string]string, body []byte) (statusCode int, respBody []byte, err error)
+
+	// WarmUp performs an initial request to target.com to populate the
+	// cookie jar with PerimeterX cookies and extract a visitorId.
+	// Must be called before Login or any checkout API calls.
+	WarmUp() error
+
+	// Login authenticates with a Target account and persists the resulting
+	// auth cookies/token in the session for subsequent API calls.
+	Login(email, password string) error
 }
