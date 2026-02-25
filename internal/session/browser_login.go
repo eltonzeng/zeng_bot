@@ -23,6 +23,12 @@ type BrowserLoginResult struct {
 // This bypasses PerimeterX because the browser executes PX's JavaScript sensor
 // natively. The resulting cookies are returned for injection into the TLS client.
 //
+// Target uses a multi-step login flow:
+//  1. Click "Sign in or create account" to open the login modal
+//  2. Enter email → click "Continue"
+//  3. Select "password" auth factor (vs passkey)
+//  4. Enter password → submit
+//
 // Set HEADLESS=1 to run without a visible browser window.
 func BrowserLogin(email, password string) (*BrowserLoginResult, error) {
 	headless := os.Getenv("HEADLESS") == "1"
@@ -44,42 +50,72 @@ func BrowserLogin(email, password string) (*BrowserLoginResult, error) {
 		return nil, fmt.Errorf("failed to open login page: %w", err)
 	}
 
-	if err := page.WaitLoad(); err != nil {
-		return nil, fmt.Errorf("login page did not load: %w", err)
-	}
+	// Wait for initial page load.
+	time.Sleep(5 * time.Second)
 	log.Println("[browser-login] login page loaded")
 
-	// Fill email field.
+	// Step 1: Click "Sign in or create account" to open the login modal.
+	// This button triggers the modal with the email input.
+	signinTrigger, err := findElement(page, []string{
+		`button[class*="ndsButton"][class*="filled"]`,
+		`button[data-test="accountNav-signIn"]`,
+	}, 5*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("sign-in trigger button not found: %w", err)
+	}
+	signinTrigger.MustClick()
+	log.Println("[browser-login] opened sign-in modal")
+	time.Sleep(2 * time.Second)
+
+	// Step 2: Fill email and click "Continue".
 	emailEl, err := findElement(page, []string{"#username", `input[name="username"]`}, 10*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("email field not found: %w", err)
 	}
-	if err := emailEl.SelectAllText(); err == nil {
-		emailEl.MustInput(email)
-	} else {
-		emailEl.MustInput(email)
-	}
+	emailEl.MustInput(email)
 	log.Println("[browser-login] filled email")
 
-	// Fill password field.
-	passEl, err := findElement(page, []string{"#password", `input[name="password"]`}, 5*time.Second)
+	continueBtn, err := findElement(page, []string{"#login", `button[type="submit"]`}, 5*time.Second)
+	if err != nil {
+		return nil, fmt.Errorf("continue button not found: %w", err)
+	}
+	continueBtn.MustClick()
+	log.Println("[browser-login] clicked continue")
+	time.Sleep(3 * time.Second)
+
+	// Step 3: Select the "password" auth factor radio if it appears.
+	// (Target may offer passkey vs password choice for existing accounts.)
+	if pwRadio, err := page.Timeout(3 * time.Second).Element(`#password-checkbox`); err == nil {
+		pwRadio.MustClick()
+		log.Println("[browser-login] selected password auth factor")
+		time.Sleep(2 * time.Second)
+	}
+
+	// Step 4: Fill the password field and submit.
+	passEl, err := findElement(page, []string{
+		`input[type="password"]`,
+		`#password`,
+		`input[name="password"]`,
+	}, 8*time.Second)
 	if err != nil {
 		return nil, fmt.Errorf("password field not found: %w", err)
 	}
 	passEl.MustInput(password)
 	log.Println("[browser-login] filled password")
 
-	// Click sign-in button.
-	loginBtn, err := findElement(page, []string{"#login", `button[data-test="login-button"]`}, 5*time.Second)
+	submitBtn, err := findElement(page, []string{
+		`#login`,
+		`button[data-test="form-submit-button"]`,
+		`button[type="submit"]`,
+	}, 5*time.Second)
 	if err != nil {
-		return nil, fmt.Errorf("login button not found: %w", err)
+		return nil, fmt.Errorf("submit button not found: %w", err)
 	}
-	loginBtn.MustClick()
-	log.Println("[browser-login] clicked sign-in")
+	submitBtn.MustClick()
+	log.Println("[browser-login] submitted login form")
 
-	// Wait for network to settle after login.
-	time.Sleep(3 * time.Second)
-	page.MustWaitStable()
+	// Wait for post-login navigation to settle.
+	time.Sleep(5 * time.Second)
 
 	// Best-effort: dismiss phone verification modal.
 	handlePhoneVerification(page)
@@ -130,8 +166,7 @@ func findElement(page *rod.Page, selectors []string, timeout time.Duration) (*ro
 func handlePhoneVerification(page *rod.Page) {
 	noThanksSelectors := []string{
 		`button[data-test="no-thanks-button"]`,
-		`button:has-text("No Thanks")`,
-		`button:has-text("Not now")`,
+		`button[id="no-thanks"]`,
 	}
 	el, err := findElement(page, noThanksSelectors, 3*time.Second)
 	if err != nil {
